@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: frameforge-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=frameforge
+
+  redis:
+    image: redis:7-alpine
+    container_name: frameforge-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: frameforge-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongodb
+      - redis
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/frameforge
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - ./server/.env
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - video_storage:/app/storage/videos
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: frameforge-worker
+    restart: unless-stopped
+    command: npm run worker
+    depends_on:
+      - mongodb
+      - redis
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongodb:27017/frameforge
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - ./server/.env
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - video_storage:/app/storage/videos
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: frameforge-client
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+
+volumes:
+  mongodb_data:
+  redis_data:
+  video_storage:
